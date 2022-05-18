@@ -8,7 +8,7 @@
 
 - 🔭 I’m currently having fun and expanding my web development knowledge with **[The Odin Project](https://www.theodinproject.com/)**
 
-- 🌱 Courses I'm currently taking at university **Data Structures and Algorithms, Linear Algebra.**
+- 🌱 Courses I'm currently taking at university **Linear Algebra.**
 
 - 👯 I’m looking to collaborate on **OpenSource Projects**
 
