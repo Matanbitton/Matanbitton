@@ -1,5 +1,6 @@
 /* =========================================
    SHARMUTOCOIN - Prediction Market App
+   Real-time multiplayer via Socket.io
    ========================================= */
 
 const STARTING_BALANCE = 200;
@@ -19,189 +20,35 @@ function getAvatarColor(name) {
     return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-// ── Data Store ──
+// ── Socket.io Connection ──
+const socket = io();
+
+// ── Local Data Cache (updated by server pushes) ──
+let localData = {
+    players: {},
+    markets: [],
+    bets: [],
+};
+
+// ── Store (reads from local cache, writes go to server) ──
 const Store = {
-    _data: null,
-
-    _default() {
-        return {
-            players: {},   // { name: { balance, joinedAt } }
-            markets: [],   // array of market objects
-            bets: [],      // array of bet objects
-        };
-    },
-
-    load() {
-        try {
-            const raw = localStorage.getItem('sharmutocoin_data');
-            this._data = raw ? JSON.parse(raw) : this._default();
-        } catch {
-            this._data = this._default();
-        }
-        return this._data;
-    },
-
-    save() {
-        localStorage.setItem('sharmutocoin_data', JSON.stringify(this._data));
-    },
-
-    get data() {
-        if (!this._data) this.load();
-        return this._data;
-    },
-
-    // Players
     getPlayer(name) {
-        return this.data.players[name] || null;
-    },
-
-    createPlayer(name) {
-        if (!this.data.players[name]) {
-            this.data.players[name] = {
-                balance: STARTING_BALANCE,
-                joinedAt: Date.now(),
-            };
-            this.save();
-        }
-        return this.data.players[name];
-    },
-
-    updateBalance(name, delta) {
-        if (this.data.players[name]) {
-            this.data.players[name].balance += delta;
-            this.save();
-        }
+        return localData.players[name] || null;
     },
 
     getAllPlayers() {
-        return Object.entries(this.data.players).map(([name, data]) => ({
+        return Object.entries(localData.players).map(([name, data]) => ({
             name,
             ...data,
         }));
     },
 
-    // Markets
-    createMarket({ question, category, description, endDate, initialOdds, createdBy }) {
-        const market = {
-            id: 'mkt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-            question,
-            category,
-            description: description || '',
-            endDate,
-            createdBy,
-            createdAt: Date.now(),
-            resolved: false,
-            resolution: null, // 'yes' or 'no'
-            yesPool: initialOdds,
-            noPool: 100 - initialOdds,
-            oddsHistory: [
-                { time: Date.now(), yes: initialOdds }
-            ],
-            volume: 0,
-        };
-        this.data.markets.push(market);
-        this.save();
-        return market;
-    },
-
     getMarket(id) {
-        return this.data.markets.find(m => m.id === id) || null;
+        return localData.markets.find(m => m.id === id) || null;
     },
 
     getAllMarkets() {
-        return [...this.data.markets].sort((a, b) => b.createdAt - a.createdAt);
-    },
-
-    resolveMarket(id, resolution) {
-        const market = this.getMarket(id);
-        if (!market || market.resolved) return;
-
-        market.resolved = true;
-        market.resolution = resolution;
-        market.resolvedAt = Date.now();
-
-        // Pay out winners
-        const marketBets = this.data.bets.filter(b => b.marketId === id);
-        for (const bet of marketBets) {
-            if (bet.side === resolution) {
-                // Winner: pay based on odds at time of bet
-                const payout = bet.potentialWin;
-                this.updateBalance(bet.player, payout);
-                bet.result = 'won';
-                bet.payout = payout;
-            } else {
-                bet.result = 'lost';
-                bet.payout = 0;
-            }
-        }
-
-        this.save();
-        return market;
-    },
-
-    // Bets
-    placeBet(marketId, player, side, amount) {
-        const market = this.getMarket(marketId);
-        if (!market || market.resolved) return null;
-
-        const playerData = this.getPlayer(player);
-        if (!playerData || playerData.balance < amount) return null;
-
-        // Calculate odds
-        const totalPool = market.yesPool + market.noPool;
-        const yesProb = market.yesPool / totalPool;
-        const noProb = market.noPool / totalPool;
-
-        let potentialWin;
-        if (side === 'yes') {
-            potentialWin = Math.round(amount / yesProb * 100) / 100;
-            // Shift odds: more yes bets -> yes becomes more likely
-            market.yesPool += amount * 0.7;
-            market.noPool = Math.max(1, market.noPool - amount * 0.15);
-        } else {
-            potentialWin = Math.round(amount / noProb * 100) / 100;
-            market.noPool += amount * 0.7;
-            market.yesPool = Math.max(1, market.yesPool - amount * 0.15);
-        }
-
-        // Deduct balance
-        this.updateBalance(player, -amount);
-
-        // Record odds change
-        const newTotal = market.yesPool + market.noPool;
-        market.oddsHistory.push({
-            time: Date.now(),
-            yes: Math.round(market.yesPool / newTotal * 100),
-        });
-
-        market.volume += amount;
-
-        const bet = {
-            id: 'bet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-            marketId,
-            player,
-            side,
-            amount,
-            potentialWin,
-            oddsAtTime: side === 'yes' ? Math.round(yesProb * 100) : Math.round(noProb * 100),
-            placedAt: Date.now(),
-            result: 'pending',
-            payout: 0,
-        };
-
-        this.data.bets.push(bet);
-        this.save();
-        return bet;
-    },
-
-    getBetsForMarket(marketId) {
-        return this.data.bets.filter(b => b.marketId === marketId)
-            .sort((a, b) => b.placedAt - a.placedAt);
-    },
-
-    getBetsForPlayer(player) {
-        return this.data.bets.filter(b => b.player === player)
-            .sort((a, b) => b.placedAt - a.placedAt);
+        return [...localData.markets].sort((a, b) => b.createdAt - a.createdAt);
     },
 
     getMarketOdds(marketId) {
@@ -212,6 +59,16 @@ const Store = {
             yes: Math.round(market.yesPool / total * 100),
             no: Math.round(market.noPool / total * 100),
         };
+    },
+
+    getBetsForMarket(marketId) {
+        return localData.bets.filter(b => b.marketId === marketId)
+            .sort((a, b) => b.placedAt - a.placedAt);
+    },
+
+    getBetsForPlayer(player) {
+        return localData.bets.filter(b => b.player === player)
+            .sort((a, b) => b.placedAt - a.placedAt);
     },
 };
 
@@ -225,16 +82,126 @@ let miniCharts = {};
 // ── DOM refs ──
 const $ = id => document.getElementById(id);
 
+// ── Socket.io Event Handlers ──
+
+socket.on('joinedOk', ({ player, allPlayers, allMarkets, allBets }) => {
+    // Populate local cache with full state from server
+    localData.players = {};
+    allPlayers.forEach(p => {
+        localData.players[p.name] = { balance: p.balance, joinedAt: p.joinedAt };
+    });
+    localData.markets = allMarkets;
+    localData.bets = allBets;
+
+    showApp();
+    toast(`Welcome, ${player.name}! You have ${Math.round(player.balance)} ${CURRENCY}`, 'success');
+});
+
+socket.on('playerJoined', ({ allPlayers }) => {
+    localData.players = {};
+    allPlayers.forEach(p => {
+        localData.players[p.name] = { balance: p.balance, joinedAt: p.joinedAt };
+    });
+    renderScoreboard();
+    renderPlayersPreview();
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab && activeTab.dataset.tab === 'leaderboard') renderLeaderboard();
+});
+
+socket.on('marketCreated', ({ allMarkets }) => {
+    localData.markets = allMarkets;
+    renderMarkets();
+});
+
+socket.on('betPlaced', ({ bet, market, allPlayers }) => {
+    // Update players
+    localData.players = {};
+    allPlayers.forEach(p => {
+        localData.players[p.name] = { balance: p.balance, joinedAt: p.joinedAt };
+    });
+
+    // Update the specific market
+    const idx = localData.markets.findIndex(m => m.id === market.id);
+    if (idx !== -1) {
+        localData.markets[idx] = market;
+    }
+
+    // Add the bet (avoid duplicates)
+    if (!localData.bets.find(b => b.id === bet.id)) {
+        localData.bets.push(bet);
+    }
+
+    // Re-render
+    updateBalanceDisplay();
+    renderScoreboard();
+    renderMarkets();
+
+    // If modal is open for this market, refresh it
+    if (currentMarketId === market.id) {
+        openMarket(market.id);
+    }
+
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab && activeTab.dataset.tab === 'my-bets') renderMyBets();
+    if (activeTab && activeTab.dataset.tab === 'leaderboard') renderLeaderboard();
+
+    // Show toast for other users' bets
+    if (bet.player !== currentUser) {
+        toast(`${bet.player} bet ${bet.amount} ${CURRENCY} on ${bet.side.toUpperCase()}`, 'info');
+    }
+});
+
+socket.on('marketResolved', ({ market, allPlayers, marketBets }) => {
+    localData.players = {};
+    allPlayers.forEach(p => {
+        localData.players[p.name] = { balance: p.balance, joinedAt: p.joinedAt };
+    });
+
+    const idx = localData.markets.findIndex(m => m.id === market.id);
+    if (idx !== -1) {
+        localData.markets[idx] = market;
+    }
+
+    // Update bets for this market
+    marketBets.forEach(updatedBet => {
+        const bIdx = localData.bets.findIndex(b => b.id === updatedBet.id);
+        if (bIdx !== -1) {
+            localData.bets[bIdx] = updatedBet;
+        }
+    });
+
+    updateBalanceDisplay();
+    renderScoreboard();
+    renderMarkets();
+
+    if (currentMarketId === market.id) {
+        closeModal();
+    }
+
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab && activeTab.dataset.tab === 'my-bets') renderMyBets();
+    if (activeTab && activeTab.dataset.tab === 'leaderboard') renderLeaderboard();
+
+    toast(`Market resolved as ${market.resolution.toUpperCase()}!`, 'info');
+});
+
+socket.on('error', ({ message }) => {
+    toast(message, 'error');
+});
+
+// Reconnection: re-join to get fresh state
+socket.on('connect', () => {
+    if (currentUser) {
+        socket.emit('join', { name: currentUser });
+    }
+});
+
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
-    Store.load();
-
-    // Check if user is already logged in
     const saved = sessionStorage.getItem('sharmutocoin_user');
     if (saved) {
         currentUser = saved;
-        Store.createPlayer(currentUser); // ensure player exists
-        showApp();
+        socket.emit('join', { name: saved });
     } else {
         showLogin();
     }
@@ -317,10 +284,8 @@ function handleLogin() {
     }
 
     currentUser = name;
-    Store.createPlayer(name);
     sessionStorage.setItem('sharmutocoin_user', name);
-    showApp();
-    toast(`Welcome, ${name}! You have ${STARTING_BALANCE} ${CURRENCY}`, 'success');
+    socket.emit('join', { name });
 }
 
 function showLogin() {
@@ -333,7 +298,6 @@ function showApp() {
     $('login-screen').classList.remove('active');
     $('app-screen').classList.add('active');
 
-    const player = Store.getPlayer(currentUser);
     $('user-name-display').textContent = currentUser;
     $('user-avatar').textContent = currentUser[0].toUpperCase();
     $('user-avatar').style.background = getAvatarColor(currentUser);
@@ -767,18 +731,17 @@ function handlePlaceBet() {
         return;
     }
 
-    const bet = Store.placeBet(currentMarketId, currentUser, betSide, amount);
-    if (!bet) {
-        toast('Could not place bet!', 'error');
-        return;
-    }
+    // Send bet to server (UI updates come back via socket events)
+    socket.emit('placeBet', {
+        marketId: currentMarketId,
+        player: currentUser,
+        side: betSide,
+        amount: amount,
+    });
 
-    toast(`Bet placed! ${amount} ${CURRENCY} on ${betSide.toUpperCase()}`, 'success');
-
-    // Refresh modal
-    updateBalanceDisplay();
-    renderScoreboard();
-    openMarket(currentMarketId);
+    // Clear form immediately for good UX
+    $('bet-amount').value = '';
+    $('potential-win-amount').textContent = `0 ${CURRENCY}`;
 }
 
 // ── Resolve Market ──
@@ -791,13 +754,11 @@ function handleResolve(resolution) {
     const confirmed = confirm(`Are you sure you want to resolve this market as ${resolution.toUpperCase()}?\n\nThis will pay out all winning bets.`);
     if (!confirmed) return;
 
-    Store.resolveMarket(currentMarketId, resolution);
-    toast(`Market resolved as ${resolution.toUpperCase()}!`, 'success');
-
-    updateBalanceDisplay();
-    renderScoreboard();
-    closeModal();
-    renderMarkets();
+    socket.emit('resolveMarket', {
+        marketId: currentMarketId,
+        resolution,
+        resolvedBy: currentUser,
+    });
 }
 
 // ── Create Market ──
@@ -819,7 +780,7 @@ function handleCreateMarket(e) {
         return;
     }
 
-    Store.createMarket({
+    socket.emit('createMarket', {
         question,
         category,
         description,
@@ -827,8 +788,6 @@ function handleCreateMarket(e) {
         initialOdds,
         createdBy: currentUser,
     });
-
-    toast('Market created!', 'success');
 
     // Reset form
     $('market-question').value = '';
