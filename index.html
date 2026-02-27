@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sharmutocoin - Prediction Market</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="screen active">
+        <div class="login-container">
+            <div class="logo-section">
+                <div class="coin-icon">&#x1F4B0;</div>
+                <h1 class="logo-text">Sharmuto<span class="highlight">coin</span></h1>
+                <p class="tagline">Predict. Bet. Win.</p>
+            </div>
+            <div class="login-card">
+                <h2>Enter the Arena</h2>
+                <p class="login-subtitle">Type your name to start with <span class="coin-amount">200 SHC</span></p>
+                <div class="input-group">
+                    <input type="text" id="player-name" placeholder="Your name..." maxlength="20" autocomplete="off">
+                    <button id="join-btn" class="btn btn-primary btn-large">LET'S GO</button>
+                </div>
+            </div>
+            <div class="active-players-preview" id="active-players-preview">
+                <h3>Active Players</h3>
+                <div id="players-list-preview"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app-screen" class="screen">
+        <!-- Top Navigation Bar -->
+        <nav class="top-nav">
+            <div class="nav-left">
+                <h1 class="nav-logo">Sharmuto<span class="highlight">coin</span></h1>
+            </div>
+            <div class="nav-right">
+                <div class="balance-display">
+                    <span class="balance-label">Balance</span>
+                    <span class="balance-amount" id="user-balance">200 SHC</span>
+                </div>
+                <div class="user-info" id="user-info">
+                    <span class="user-avatar" id="user-avatar">M</span>
+                    <span class="user-name" id="user-name-display">Matan</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab active" data-tab="markets">Markets</button>
+            <button class="tab" data-tab="leaderboard">Leaderboard</button>
+            <button class="tab" data-tab="my-bets">My Bets</button>
+            <button class="tab" data-tab="create">+ Create Market</button>
+        </div>
+
+        <!-- Live Scoreboard -->
+        <div class="scoreboard-bar" id="scoreboard-bar">
+            <!-- Injected by JS -->
+        </div>
+
+        <!-- Markets Tab -->
+        <div class="tab-content active" id="tab-markets">
+            <div class="markets-header">
+                <h2>Active Markets</h2>
+                <div class="filter-pills">
+                    <button class="pill active" data-filter="all">All</button>
+                    <button class="pill" data-filter="politics">Politics</button>
+                    <button class="pill" data-filter="sports">Sports</button>
+                    <button class="pill" data-filter="entertainment">Entertainment</button>
+                    <button class="pill" data-filter="other">Other</button>
+                </div>
+            </div>
+            <div class="markets-grid" id="markets-grid">
+                <!-- Markets will be injected here -->
+            </div>
+        </div>
+
+        <!-- Leaderboard Tab -->
+        <div class="tab-content" id="tab-leaderboard">
+            <div class="leaderboard-container">
+                <h2>Leaderboard</h2>
+                <div class="leaderboard-list" id="leaderboard-list">
+                    <!-- Leaderboard rows injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- My Bets Tab -->
+        <div class="tab-content" id="tab-my-bets">
+            <div class="my-bets-container">
+                <h2>My Bets</h2>
+                <div class="bets-list" id="bets-list">
+                    <!-- User bets injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Market Tab -->
+        <div class="tab-content" id="tab-create">
+            <div class="create-container">
+                <h2>Create a New Market</h2>
+                <form id="create-market-form" class="create-form">
+                    <div class="form-group">
+                        <label for="market-question">Question</label>
+                        <input type="text" id="market-question" placeholder='e.g. "Will the US strike Iran before April 2026?"' required>
+                    </div>
+                    <div class="form-group">
+                        <label for="market-category">Category</label>
+                        <select id="market-category">
+                            <option value="politics">Politics</option>
+                            <option value="sports">Sports</option>
+                            <option value="entertainment">Entertainment</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="market-description">Description (optional)</label>
+                        <textarea id="market-description" placeholder="Add context or rules for this market..." rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="market-end-date">Closing Date</label>
+                        <input type="date" id="market-end-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="market-initial-odds">Starting "YES" Probability (%)</label>
+                        <input type="range" id="market-initial-odds" min="5" max="95" value="50">
+                        <div class="range-labels">
+                            <span>Unlikely</span>
+                            <span class="odds-display" id="odds-display">50%</span>
+                            <span>Very Likely</span>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large">Create Market</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Market Detail Modal -->
+        <div class="modal-overlay" id="market-modal">
+            <div class="modal">
+                <button class="modal-close" id="modal-close">&times;</button>
+                <div class="modal-header">
+                    <span class="modal-category" id="modal-category">POLITICS</span>
+                    <h2 id="modal-title">Will the US strike Iran before April 2026?</h2>
+                    <p class="modal-description" id="modal-description"></p>
+                    <div class="modal-meta">
+                        <span id="modal-volume">Volume: 0 SHC</span>
+                        <span id="modal-closing">Closes: --</span>
+                    </div>
+                </div>
+                <div class="modal-chart-section">
+                    <canvas id="odds-chart"></canvas>
+                </div>
+                <div class="modal-odds-display">
+                    <div class="odds-card yes">
+                        <span class="odds-label">YES</span>
+                        <span class="odds-value" id="modal-yes-odds">50%</span>
+                        <span class="odds-payout" id="modal-yes-payout">Win 2.00x</span>
+                    </div>
+                    <div class="odds-card no">
+                        <span class="odds-label">NO</span>
+                        <span class="odds-value" id="modal-no-odds">50%</span>
+                        <span class="odds-payout" id="modal-no-payout">Win 2.00x</span>
+                    </div>
+                </div>
+                <div class="bet-section">
+                    <h3>Place Your Bet</h3>
+                    <div class="bet-side-toggle">
+                        <button class="side-btn active" id="bet-yes-btn" data-side="yes">YES</button>
+                        <button class="side-btn" id="bet-no-btn" data-side="no">NO</button>
+                    </div>
+                    <div class="bet-amount-section">
+                        <div class="bet-input-row">
+                            <input type="number" id="bet-amount" placeholder="Amount" min="1" max="9999">
+                            <span class="bet-currency">SHC</span>
+                        </div>
+                        <div class="quick-amounts">
+                            <button class="quick-btn" data-amount="5">5</button>
+                            <button class="quick-btn" data-amount="10">10</button>
+                            <button class="quick-btn" data-amount="25">25</button>
+                            <button class="quick-btn" data-amount="50">50</button>
+                            <button class="quick-btn" data-amount="100">100</button>
+                            <button class="quick-btn" data-amount="max">MAX</button>
+                        </div>
+                        <div class="potential-win">
+                            <span>Potential Win:</span>
+                            <span id="potential-win-amount">0 SHC</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-large" id="place-bet-btn">Place Bet</button>
+                </div>
+                <div class="modal-bets-history">
+                    <h3>Recent Bets</h3>
+                    <div id="modal-bets-list"></div>
+                </div>
+                <div class="modal-actions" id="modal-resolve-section" style="display:none;">
+                    <h3>Resolve Market</h3>
+                    <div class="resolve-buttons">
+                        <button class="btn btn-yes" id="resolve-yes-btn">Resolve YES</button>
+                        <button class="btn btn-no" id="resolve-no-btn">Resolve NO</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
