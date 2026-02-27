@@ -3,7 +3,7 @@
    Real-time multiplayer via Socket.io
    ========================================= */
 
-const STARTING_BALANCE = 200;
+const STARTING_BALANCE = 10000;
 const CURRENCY = 'SHC';
 
 // ── Avatar colors ──
@@ -525,7 +525,7 @@ function openMarket(marketId) {
 
     // Show/hide resolve section (creator can resolve)
     const resolveSection = $('modal-resolve-section');
-    if (market.createdBy === currentUser && !market.resolved) {
+    if (currentUser === 'Matan' && !market.resolved) {
         resolveSection.style.display = 'block';
     } else {
         resolveSection.style.display = 'none';

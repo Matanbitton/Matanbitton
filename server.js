@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 const PORT = process.env.PORT || 3000;
-const STARTING_BALANCE = 200;
+const STARTING_BALANCE = 10000;
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -259,8 +259,8 @@ io.on('connection', (socket) => {
             socket.emit('error', { message: 'Market not found' });
             return;
         }
-        if (market.createdBy !== resolvedBy) {
-            socket.emit('error', { message: 'Only the creator can resolve this market' });
+        if (resolvedBy !== 'Matan') {
+            socket.emit('error', { message: 'Only Matan can resolve markets' });
             return;
         }
         if (market.resolved) {
